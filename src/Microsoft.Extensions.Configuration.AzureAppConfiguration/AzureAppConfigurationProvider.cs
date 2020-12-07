@@ -530,20 +530,33 @@ namespace Microsoft.Extensions.Configuration.AzureAppConfiguration
 
             foreach (IKeyValueAdapter adapter in _options.Adapters)
             {
-                if (!adapter.CanProcess(setting))
+                IEnumerable<KeyValuePair<string, string>> kvs = null;
+
+                if (adapter.CanProcess(setting))
                 {
-                    continue;
+                    kvs = await adapter.ProcessKeyValue(setting, cancellationToken).ConfigureAwait(false);
                 }
 
-                IEnumerable<KeyValuePair<string, string>> kvs = await adapter.ProcessKeyValue(setting, cancellationToken).ConfigureAwait(false);
+                foreach (Func<ConfigurationSetting, ValueTask<ConfigurationSetting>> userDefinedAdapter in _options.UserDefinedAdapters)
+                {
+                    // need to run this adapter on output of built in adapter (kvs) - not on setting fetched from server
+                    // 
+                    ConfigurationSetting transformedSetting = await userDefinedAdapter(setting).ConfigureAwait(false);
+
+                    kvs = new KeyValuePair<string, string>[]
+                    {
+                        new KeyValuePair<string, string>(transformedSetting.Key, transformedSetting.Value)
+                    };
+                }
 
                 if (kvs != null)
                 {
                     keyValues = keyValues ?? new List<KeyValuePair<string, string>>();
-
                     keyValues.AddRange(kvs);
                 }
             }
+
+            
 
             return keyValues ?? Enumerable.Repeat(new KeyValuePair<string, string>(setting.Key, setting.Value), 1);
         }

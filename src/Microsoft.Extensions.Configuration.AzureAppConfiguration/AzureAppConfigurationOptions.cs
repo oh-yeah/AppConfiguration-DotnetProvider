@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration.AzureAppConfiguration.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace Microsoft.Extensions.Configuration.AzureAppConfiguration
 {
@@ -34,6 +35,10 @@ namespace Microsoft.Extensions.Configuration.AzureAppConfiguration
         private IConfigurationRefresher _refresher = new AzureAppConfigurationRefresher();
 
         private SortedSet<string> _keyPrefixes = new SortedSet<string>(Comparer<string>.Create((k1, k2) => -string.Compare(k1, k2, StringComparison.InvariantCultureIgnoreCase)));
+
+        private List<Func<ConfigurationSetting, ValueTask<ConfigurationSetting>>> _userDefinedAdapters = new List<Func<ConfigurationSetting, ValueTask<ConfigurationSetting>>>();
+
+        internal IEnumerable<Func<ConfigurationSetting, ValueTask<ConfigurationSetting>>> UserDefinedAdapters => _userDefinedAdapters;
 
         /// <summary>
         /// The connection string to use to connect to Azure App Configuration.
@@ -95,6 +100,26 @@ namespace Microsoft.Extensions.Configuration.AzureAppConfiguration
         /// Options used to configure the client used to communicate with Azure App Configuration.
         /// </summary>
         internal ConfigurationClientOptions ClientOptions { get; } = GetDefaultClientOptions();
+
+        /// <summary>
+        /// Specify what key-values to include in the configuration provider.
+        /// <see cref="Map"/> can be called multiple times to include multiple sets of key-values.
+        /// </summary>
+        /// <param name="mapper">
+        /// The key filter to apply when querying Azure App Configuration for key-values.
+        /// The characters asterisk (*), comma (,) and backslash (\) are reserved and must be escaped using a backslash (\).
+        /// Built-in key filter options: <see cref="KeyFilter"/>.
+        /// </param>
+        public AzureAppConfigurationOptions Map(Func<ConfigurationSetting, ValueTask<ConfigurationSetting>> mapper)
+        {
+            if (mapper == null)
+            {
+                throw new ArgumentNullException(nameof(mapper));
+            }
+
+            _userDefinedAdapters.Add(mapper);
+            return this;
+        }
 
         /// <summary>
         /// Specify what key-values to include in the configuration provider.
